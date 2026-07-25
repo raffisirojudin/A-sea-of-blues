@@ -47,7 +47,61 @@
     <!-- Overlay UI -->
     <div class="ui">
       <div class="ui-top">
-        <div class="label">◑ &nbsp;T I D E S</div>
+        <div class="top-left">
+          <div class="label" id="scene-label">◑ &nbsp;T I D E S</div>
+          <div class="mode-switch" role="group" aria-label="Scene">
+            <button
+              type="button"
+              class="mode-btn active"
+              data-mode="ocean"
+              aria-pressed="true"
+            >
+              OCEAN
+            </button>
+            <button
+              type="button"
+              class="mode-btn"
+              data-mode="mountain"
+              aria-pressed="false"
+            >
+              MOUNTAIN
+            </button>
+          </div>
+          <div class="mode-switch" role="group" aria-label="Season">
+            <button
+              type="button"
+              class="season-btn"
+              data-season="spring"
+              aria-pressed="false"
+            >
+              SPR
+            </button>
+            <button
+              type="button"
+              class="season-btn active"
+              data-season="summer"
+              aria-pressed="true"
+            >
+              SUM
+            </button>
+            <button
+              type="button"
+              class="season-btn"
+              data-season="autumn"
+              aria-pressed="false"
+            >
+              AUT
+            </button>
+            <button
+              type="button"
+              class="season-btn"
+              data-season="winter"
+              aria-pressed="false"
+            >
+              WIN
+            </button>
+          </div>
+        </div>
         <div class="mood">
           <span id="mood-name">GOLDEN HOUR</span>
           <span class="mood-time" id="mood-time">19:12</span>
@@ -57,13 +111,35 @@
         <p class="caption">Same sea — <em>every hour a different blue.</em></p>
         <div class="controls">
           <button
+            id="soundBtn"
+            class="play-btn"
+            type="button"
+            aria-pressed="false"
+            aria-label="Turn ambient sound on"
+            title="Ambient sound"
+          >
+            ♪
+          </button>
+          <button
+            id="rainBtn"
+            class="play-btn muted"
+            type="button"
+            aria-pressed="false"
+            aria-label="Turn rain on"
+            title="Rain"
+          >
+            ☂
+          </button>
+          <button
             id="playBtn"
             class="play-btn"
             type="button"
             aria-pressed="false"
             aria-label="Play automatic time-lapse"
             title="Play time-lapse"
-          >▶</button>
+          >
+            ▶
+          </button>
           <div class="slider-wrap">
             <span class="slider-end">DAWN</span>
             <input
