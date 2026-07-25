@@ -37,12 +37,60 @@ body {
   justify-content: space-between;
   align-items: flex-start;
 }
+.top-left {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 .label {
   font-size: 12px;
   letter-spacing: 0.45em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.85);
   text-shadow: 0 1px 12px rgba(0, 0, 0, 0.4);
+}
+.mode-switch {
+  pointer-events: auto;
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  width: fit-content;
+  background: rgba(10, 16, 28, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  backdrop-filter: blur(12px);
+}
+.mode-btn,
+.season-btn {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font-family: "DM Mono", monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.15em;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
+}
+.season-btn {
+  padding: 6px 8px;
+}
+.mode-btn:hover,
+.season-btn:hover {
+  color: rgba(255, 255, 255, 0.85);
+}
+.mode-btn.active,
+.season-btn.active {
+  background: rgba(255, 255, 255, 0.92);
+  color: #16202f;
+}
+.mode-btn:focus-visible,
+.season-btn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.6);
+  outline-offset: 2px;
 }
 .mood {
   text-align: right;
@@ -116,6 +164,9 @@ body {
 .play-btn:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.6);
   outline-offset: 2px;
+}
+.play-btn.muted {
+  color: rgba(255, 255, 255, 0.4);
 }
 /* ── SLIDER ── */
 .slider-wrap {
