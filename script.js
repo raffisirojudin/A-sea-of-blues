@@ -40,6 +40,8 @@ const KEYS = [
     sandWet: [130, 90, 92],
     ridgeFar: [138, 138, 168],
     ridgeNear: [42, 52, 68],
+    duneFar: [196, 148, 132],
+    duneNear: [118, 68, 56],
     sunH: 0.1,
     glit: 0.7,
     star: 0,
@@ -59,6 +61,8 @@ const KEYS = [
     sandWet: [110, 145, 148],
     ridgeFar: [128, 164, 180],
     ridgeNear: [38, 88, 76],
+    duneFar: [222, 184, 142],
+    duneNear: [168, 112, 74],
     sunH: 0.55,
     glit: 0.5,
     star: 0,
@@ -78,6 +82,8 @@ const KEYS = [
     sandWet: [95, 150, 155],
     ridgeFar: [134, 172, 186],
     ridgeNear: [34, 92, 70],
+    duneFar: [230, 200, 156],
+    duneNear: [190, 146, 96],
     sunH: 0.92,
     glit: 0.45,
     star: 0,
@@ -97,6 +103,8 @@ const KEYS = [
     sandWet: [130, 88, 68],
     ridgeFar: [198, 166, 144],
     ridgeNear: [66, 58, 52],
+    duneFar: [212, 140, 90],
+    duneNear: [150, 80, 50],
     sunH: 0.3,
     glit: 0.95,
     star: 0,
@@ -116,6 +124,8 @@ const KEYS = [
     sandWet: [70, 48, 72],
     ridgeFar: [164, 112, 118],
     ridgeNear: [48, 36, 54],
+    duneFar: [162, 92, 96],
+    duneNear: [92, 52, 62],
     sunH: 0.06,
     glit: 1.0,
     star: 0.15,
@@ -135,6 +145,8 @@ const KEYS = [
     sandWet: [26, 34, 58],
     ridgeFar: [52, 62, 94],
     ridgeNear: [13, 17, 30],
+    duneFar: [70, 76, 102],
+    duneNear: [34, 38, 58],
     sunH: 0.55,
     glit: 0.55,
     star: 1,
@@ -172,6 +184,8 @@ function getPalette(t) {
     sandWet: lerpRGB(a.sandWet, b.sandWet, k),
     ridgeFar: lerpRGB(a.ridgeFar, b.ridgeFar, k),
     ridgeNear: lerpRGB(a.ridgeNear, b.ridgeNear, k),
+    duneFar: lerpRGB(a.duneFar, b.duneFar, k),
+    duneNear: lerpRGB(a.duneNear, b.duneNear, k),
     sunH: lerp(a.sunH, b.sunH, k),
     glit: lerp(a.glit, b.glit, k),
     star: lerp(a.star, b.star, k),
@@ -338,6 +352,43 @@ const RIDGE_PROFILE = [
 const NUM_RIDGES = RIDGE_PROFILE.length;
 const mountainLayers = RIDGE_PROFILE.map((p) => generateRidgeLayer(p.sharp));
 
+/* dune silhouettes — smooth and rolling, not jagged like the mountain
+   ridges. A gentle point-count with height variance, rendered later
+   through quadratic curves so the line itself stays soft. */
+function generateDuneLayer(sharpness) {
+  const numPts = 6 + Math.floor(Math.random() * 3);
+  const pts = [];
+  for (let i = 0; i <= numPts; i++) {
+    pts.push({
+      xf: i / numPts,
+      hf: 0.22 + Math.random() * (0.35 + sharpness * 0.4),
+    });
+  }
+  return pts;
+}
+/* far → near: dunes stay much gentler than mountains overall — even
+   the "big" one is a soft roll, never a jagged spike */
+const DUNE_PROFILE = [
+  { amp: 0.035, sharp: 0.1 },
+  { amp: 0.07, sharp: 0.2 },
+  { amp: 0.13, sharp: 0.35 },
+  { amp: 0.3, sharp: 0.55 }, // the big dune
+  { amp: 0.17, sharp: 0.35 },
+  { amp: 0.06, sharp: 0.15 },
+];
+const NUM_DUNES = DUNE_PROFILE.length;
+const duneLayers = DUNE_PROFILE.map((p) => generateDuneLayer(p.sharp));
+
+/* an extra, fainter star field only switched on in the desert — the
+   sky there should read as noticeably more star-dense than the other
+   two scenes */
+const desertStars = Array.from({ length: 120 }, () => ({
+  x: Math.random(),
+  y: Math.random() * 0.42,
+  r: Math.random() * 0.9 + 0.2,
+  tw: Math.random() * Math.PI * 2,
+}));
+
 const palmFronds = [-165, -136, -108, -80, -52, -24, 5, 32].map((deg) => ({
   deg,
   len: 80 + Math.random() * 26,
@@ -421,6 +472,11 @@ const moodTime = document.getElementById("mood-time");
 
 /* scene mode: swaps the foreground (ocean+beach vs mountains) while
    the sky/sun/moon/stars keep driving both from the same palette */
+const SCENE_LABELS = {
+  ocean: "◑ \u00A0T I D E S",
+  mountain: "▲ \u00A0S U M M I T",
+  desert: "☼ \u00A0M I R A G E",
+};
 let sceneMode = "ocean";
 const sceneLabel = document.getElementById("scene-label");
 const modeButtons = document.querySelectorAll(".mode-btn");
@@ -434,8 +490,7 @@ modeButtons.forEach((btn) => {
       b.classList.toggle("active", active);
       b.setAttribute("aria-pressed", String(active));
     });
-    sceneLabel.textContent =
-      sceneMode === "ocean" ? "◑ \u00A0T I D E S" : "▲ \u00A0S U M M I T";
+    sceneLabel.textContent = SCENE_LABELS[sceneMode];
   });
 });
 
@@ -648,6 +703,7 @@ soundBtn.addEventListener("click", () => {
     const now = audioCtx.currentTime;
     audioNodes.waveGain.gain.setTargetAtTime(0, now, 0.3);
     audioNodes.windGain.gain.setTargetAtTime(0, now, 0.3);
+    audioNodes.rainGain.gain.setTargetAtTime(0, now, 0.3);
   }
 });
 
@@ -671,11 +727,274 @@ function spawnRipple(x, y) {
   });
 }
 
+let sunHoldTimer = null;
 canvas.addEventListener("pointerdown", (e) => {
   if (sceneMode === "ocean" && e.clientY > horizonY && e.clientY < sandTopY) {
     spawnRipple(e.clientX, e.clientY);
   }
+  checkSunClickEasterEgg(e.clientX, e.clientY);
+  checkMirageEasterEgg(e.clientX, e.clientY);
+
+  const distToSun = Math.hypot(
+    e.clientX - currentSunX,
+    e.clientY - currentSunY,
+  );
+  if (distToSun < currentSunR * 2.2 && !eclipseActive) {
+    sunHoldTimer = setTimeout(triggerEclipse, 1600);
+  }
 });
+["pointerup", "pointerleave", "pointercancel"].forEach((evt) => {
+  canvas.addEventListener(evt, () => {
+    if (sunHoldTimer) {
+      clearTimeout(sunHoldTimer);
+      sunHoldTimer = null;
+    }
+  });
+});
+
+canvas.addEventListener("dblclick", (e) => {
+  if (sceneMode !== "ocean") return;
+  if (e.clientY > horizonY && e.clientY < sandTopY) {
+    fishJumps.push({
+      x: e.clientX,
+      y: e.clientY,
+      age: 0,
+      life: 0.85 + Math.random() * 0.3,
+      dir: Math.random() < 0.5 ? -1 : 1,
+    });
+  }
+});
+
+/* ════════════════════════════════════════
+   EASTER EGGS — for anyone curious enough to poke at things
+═══════════════════════════════════════ */
+let currentSunX = 0,
+  currentSunY = 0,
+  currentSunR = 0;
+let currentHeat = 0; // how strong the desert heat-shimmer is right now
+
+/* egg #5 — desert-only. Click into the shimmer near the horizon on a
+   hot, bright dune day and the heat briefly plays a trick on you: a
+   little oasis, borrowed straight from the ocean scene, that was
+   never really there */
+let mirageActive = false;
+let mirageAge = 0;
+let mirageLife = 0;
+let mirageX = 0;
+function triggerMirage(x) {
+  if (mirageActive) return;
+  mirageActive = true;
+  mirageAge = 0;
+  mirageLife = 5 + Math.random() * 2;
+  mirageX = Math.max(W * 0.15, Math.min(W * 0.85, x));
+  showSecretMessage("~ just a mirage ~");
+}
+function checkMirageEasterEgg(x, y) {
+  if (sceneMode !== "desert" || mirageActive) return;
+  if (currentHeat < 0.15) return; // needs real midday heat to work
+  if (Math.abs(y - horizonY) > 55) return; // has to be near the shimmer band
+  triggerMirage(x);
+}
+function updateAndDrawMirage(dt) {
+  if (!mirageActive) return;
+  mirageAge += dt;
+  if (mirageAge > mirageLife) {
+    mirageActive = false;
+    return;
+  }
+  const t = mirageAge / mirageLife;
+  const fade = Math.min(1, t * 3) * Math.min(1, (1 - t) * 1.6);
+  if (fade <= 0.01) return;
+
+  const wobbleX = Math.sin(T * 3.2) * 4;
+  const baseY = horizonY + 4;
+
+  ctx.save();
+  ctx.globalAlpha = fade * 0.78;
+
+  const poolGrad = ctx.createRadialGradient(
+    mirageX,
+    baseY,
+    2,
+    mirageX,
+    baseY,
+    90,
+  );
+  poolGrad.addColorStop(0, "rgba(170,220,232,0.6)");
+  poolGrad.addColorStop(1, "rgba(170,220,232,0)");
+  ctx.beginPath();
+  ctx.ellipse(mirageX + wobbleX, baseY, 85, 12, 0, 0, Math.PI * 2);
+  ctx.fillStyle = poolGrad;
+  ctx.fill();
+
+  drawPalmTree(
+    mirageX + wobbleX * 1.4,
+    baseY,
+    1.05,
+    Math.sin(T * 2) * 0.4,
+    "rgba(38,40,50,0.82)",
+  );
+
+  ctx.restore();
+}
+
+/* egg #3 — hold the sun/moon down for a second and a half: the
+   whole sky goes dark in the middle of the day, corona and all,
+   then eases back like nothing happened */
+let eclipseActive = false;
+let eclipseT = 0;
+function triggerEclipse() {
+  if (eclipseActive) return;
+  eclipseActive = true;
+  eclipseT = 0;
+  showSecretMessage("◑ totality ◑");
+}
+
+/* on-screen toast for the moments a secret is actually found */
+let secretMsg = { text: "", alpha: 0 };
+function showSecretMessage(text) {
+  secretMsg = { text, alpha: 1 };
+}
+function updateAndDrawSecretMessage() {
+  if (secretMsg.alpha <= 0.01) return;
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, secretMsg.alpha);
+  ctx.font = "13px 'DM Mono', monospace";
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#fff";
+  ctx.shadowColor = "rgba(0,0,0,0.6)";
+  ctx.shadowBlur = 10;
+  ctx.fillText(secretMsg.text, W / 2, Math.min(H * 0.16, 90));
+  ctx.restore();
+  secretMsg.alpha -= 0.0045;
+}
+
+/* egg #1 — click the sun/moon five times in a row: a private
+   shooting-star shower, any time of day */
+let sunClickTimes = [];
+function checkSunClickEasterEgg(x, y) {
+  if (currentSunR <= 0) return;
+  const dist = Math.hypot(x - currentSunX, y - currentSunY);
+  if (dist > currentSunR * 2) return;
+  const now = performance.now();
+  sunClickTimes.push(now);
+  sunClickTimes = sunClickTimes.filter((t) => now - t < 2600);
+  if (sunClickTimes.length >= 5) {
+    sunClickTimes = [];
+    for (let i = 0; i < 14; i++) {
+      setTimeout(() => spawnShootingStar({ bright: 1 }), i * 90);
+    }
+    showSecretMessage("✦ make a wish ✦");
+  }
+}
+
+/* egg #4 — no click, no code: just be patient in the right place.
+   Mountain + Winter + a dark enough sky, held for a while, and the
+   aurora quietly shows up on its own — guaranteed within ~25s of
+   holding those conditions, not left purely to chance */
+let auroraActive = false;
+let auroraAge = 0;
+let auroraLife = 0;
+let auroraConditionTime = 0;
+function maybeTriggerAurora(P, dt) {
+  const conditionsMet =
+    sceneMode === "mountain" && season === "winter" && !rainOn && P.star >= 0.7;
+  if (!conditionsMet) {
+    auroraConditionTime = 0;
+    return;
+  }
+  if (auroraActive) return;
+  auroraConditionTime += dt;
+  if (Math.random() < 0.05 * dt || auroraConditionTime > 25) {
+    auroraActive = true;
+    auroraAge = 0;
+    auroraLife = 16 + Math.random() * 6;
+    auroraConditionTime = 0;
+    showSecretMessage("◑ the aurora finds you ◑");
+  }
+}
+
+function updateAndDrawAurora(dt) {
+  if (!auroraActive) return;
+  auroraAge += dt;
+  if (auroraAge > auroraLife) {
+    auroraActive = false;
+    return;
+  }
+  const t = auroraAge / auroraLife;
+  const fade = Math.min(1, t * 4) * Math.min(1, (1 - t) * 2.2);
+  if (fade <= 0.01) return;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const bands = [
+    { col: [90, 255, 175], yBase: 0.05, amp: 0.045, speed: 0.15 },
+    { col: [150, 130, 255], yBase: 0.11, amp: 0.055, speed: 0.11 },
+    { col: [90, 205, 255], yBase: 0.17, amp: 0.04, speed: 0.19 },
+  ];
+  bands.forEach((b, bi) => {
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 16) {
+      const xf = x / W;
+      const y =
+        (b.yBase + Math.sin(xf * 4 + T * b.speed + bi) * b.amp) * horizonY;
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    for (let x = W; x >= 0; x -= 16) {
+      const xf = x / W;
+      const y =
+        (b.yBase + 0.13 + Math.sin(xf * 4 + T * b.speed + bi + 1) * b.amp) *
+        horizonY;
+      ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = rgb(b.col, fade * 0.22);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+/* egg #2 — the Konami code guarantees a UFO sighting */
+const KONAMI = [
+  "ArrowUp",
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowLeft",
+  "ArrowRight",
+  "b",
+  "a",
+];
+let konamiProgress = 0;
+window.addEventListener("keydown", (e) => {
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  const expected = KONAMI[konamiProgress];
+  if (key === expected) {
+    konamiProgress++;
+    if (konamiProgress === KONAMI.length) {
+      konamiProgress = 0;
+      spawnShootingStar({ ufo: true, bright: 1 });
+      showSecretMessage("◑ you found the secret ◑");
+    }
+  } else {
+    konamiProgress = key === KONAMI[0] ? 1 : 0;
+  }
+});
+
+console.log(
+  "%c◑ A sea of blues",
+  "font-size:16px;font-weight:bold;color:#8fc6e8;",
+);
+console.log(
+  "%csame sea, every hour a different blue — and a few things hiding in it.",
+  "color:#8a97a8;font-style:italic;",
+);
+console.log(
+  "%chint: the sun doesn't like being clicked five times. and someone left a code here in the 80s.",
+  "color:#8a97a8;",
+);
 
 function updateAndDrawRipples(P, dt) {
   ripples.forEach((rp) => {
@@ -706,19 +1025,35 @@ function updateAndDrawRipples(P, dt) {
 }
 
 /* ════════════════════════════════════════
-   SHOOTING STARS — rare, only once it's dark enough
+   SHOOTING STARS — rare, only once it's dark enough.
+   A tiny fraction are secretly a UFO instead — a quiet reward for
+   anyone who happens to be watching closely.
 ═══════════════════════════════════════ */
 let shootingStars = [];
 
-function maybeSpawnShootingStar(P, dt) {
-  if (P.star < 0.5) return; // sky isn't dark enough yet
-  const chancePerSecond = 0.18; // roughly one every ~5-6s once it's dark
-  if (Math.random() < chancePerSecond * dt) {
+function spawnShootingStar(opts) {
+  opts = opts || {};
+  const isUFO = opts.ufo || false;
+  const bright = opts.bright; // set only by easter eggs — ignores P.star fade
+  if (isUFO) {
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    shootingStars.push({
+      ufo: true,
+      x: dir > 0 ? -30 : W + 30,
+      baseY: horizonY * (0.15 + Math.random() * 0.35),
+      vx: dir * (95 + Math.random() * 55),
+      bobPhase: Math.random() * Math.PI * 2,
+      age: 0,
+      life: 6 + Math.random() * 2,
+      bright,
+    });
+  } else {
     const startX = W * (0.1 + Math.random() * 0.6);
     const startY = horizonY * (0.05 + Math.random() * 0.3);
     const angle = ((20 + Math.random() * 25) * Math.PI) / 180;
     const speed = 850 + Math.random() * 400;
     shootingStars.push({
+      ufo: false,
       x: startX,
       y: startY,
       vx: Math.cos(angle) * speed,
@@ -726,21 +1061,62 @@ function maybeSpawnShootingStar(P, dt) {
       len: 55 + Math.random() * 45,
       age: 0,
       life: 0.5 + Math.random() * 0.25,
+      bright,
     });
+  }
+}
+
+function maybeSpawnShootingStar(P, dt) {
+  if (P.star < 0.5 || rainOn) return; // sky isn't dark enough, or storm hides it
+  const chancePerSecond = 0.18; // roughly one every ~5-6s once it's dark
+  if (Math.random() < chancePerSecond * dt) {
+    spawnShootingStar({ ufo: Math.random() < 0.045 });
   }
 }
 
 function updateAndDrawShootingStars(P, dt) {
   shootingStars.forEach((s) => {
     s.age += dt;
-    s.x += s.vx * dt;
-    s.y += s.vy * dt;
+    if (!s.ufo) {
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+    } else {
+      s.x += s.vx * dt;
+    }
   });
   shootingStars = shootingStars.filter((s) => s.age < s.life);
 
   shootingStars.forEach((s) => {
     const t = s.age / s.life;
-    const alpha = Math.min(1, t * 5) * (1 - t) * P.star;
+    const visibility = s.bright !== undefined ? s.bright : P.star;
+
+    if (s.ufo) {
+      const alpha = Math.min(1, t * 3) * Math.min(1, (1 - t) * 3) * visibility;
+      if (alpha <= 0.01) return;
+      const y = s.baseY + Math.sin(T * 2.3 + s.bobPhase) * 7;
+
+      ctx.fillStyle = rgb([18, 20, 28], alpha * 0.92);
+      ctx.beginPath();
+      ctx.ellipse(s.x, y, 17, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(s.x, y - 4, 7.5, 5.5, Math.PI, 0, Math.PI);
+      ctx.fill();
+
+      const blink = 0.5 + 0.5 * Math.sin(T * 11 + s.bobPhase);
+      [-10, 0, 10].forEach((off, i) => {
+        ctx.fillStyle = rgb(
+          i === 1 ? [150, 255, 190] : [255, 130, 150],
+          alpha * blink,
+        );
+        ctx.beginPath();
+        ctx.arc(s.x + off, y + 3.5, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      return;
+    }
+
+    const alpha = Math.min(1, t * 5) * (1 - t) * visibility;
     if (alpha <= 0.01) return;
     const mag = Math.hypot(s.vx, s.vy) || 1;
     const tailX = s.x - (s.vx / mag) * s.len;
@@ -1179,6 +1555,29 @@ function buildRidgePath(pts, yTop, amp) {
   ctx.closePath();
 }
 
+/* smooth dune silhouette — curves through each point's midpoint to
+   its neighbor instead of straight lineTo segments, so the crest
+   rolls softly the way sand actually does */
+function buildDunePath(pts, yTop, amp) {
+  const toXY = (p) => [p.xf * W, yTop - amp * p.hf];
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  const [x0, y0] = toXY(pts[0]);
+  ctx.lineTo(0, y0);
+  ctx.lineTo(x0, y0);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [xa, ya] = toXY(pts[i]);
+    const [xb, yb] = toXY(pts[i + 1]);
+    const midX = (xa + xb) / 2,
+      midY = (ya + yb) / 2;
+    ctx.quadraticCurveTo(xa, ya, midX, midY);
+  }
+  const last = toXY(pts[pts.length - 1]);
+  ctx.lineTo(last[0], last[1]);
+  ctx.lineTo(W, H);
+  ctx.closePath();
+}
+
 function drawMountainScene(P, sway) {
   const tint = SEASON_TINTS[season];
   for (let i = 0; i < NUM_RIDGES; i++) {
@@ -1248,11 +1647,126 @@ function drawMountainScene(P, sway) {
   const silCol = rgb(
     lerpRGB(lerpRGB(P.ridgeNear, tint.ground, 0.3), [0, 0, 0], 0.5),
   );
-  const pineScale = Math.min(2.4, H / 340, W / 340);
-  drawPineTree(W * 0.1, H - 6, pineScale, sway, silCol);
-  drawPineTree(W * 0.17, H - 4, pineScale * 0.68, sway, silCol);
+  const pineScale = Math.min(3.6, H / 220, W / 260);
+  drawPineTree(W * 0.09, H - 6, pineScale, sway, silCol);
+  drawPineTree(W * 0.2, H - 4, pineScale * 0.62, sway, silCol);
   drawRock(W * 0.86, H - 10, 50, 32, silCol);
   drawRock(W * 0.91, H - 6, 30, 20, silCol);
+}
+
+/* ════════════════════════════════════════
+   DESERT — rolling dunes, cacti, the clearest night sky of the three
+═══════════════════════════════════════ */
+function drawCactus(x, baseY, scale, col) {
+  ctx.save();
+  ctx.translate(x, baseY);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = col;
+
+  /* main trunk, rounded top */
+  ctx.beginPath();
+  ctx.moveTo(-10, 4);
+  ctx.lineTo(-10, -70);
+  ctx.quadraticCurveTo(-10, -86, 0, -86);
+  ctx.quadraticCurveTo(10, -86, 10, -70);
+  ctx.lineTo(10, 4);
+  ctx.closePath();
+  ctx.fill();
+
+  /* left arm, lower */
+  ctx.beginPath();
+  ctx.moveTo(-10, -30);
+  ctx.bezierCurveTo(-34, -32, -40, -50, -34, -64);
+  ctx.quadraticCurveTo(-32, -72, -24, -70);
+  ctx.bezierCurveTo(-28, -58, -24, -44, -6, -42);
+  ctx.closePath();
+  ctx.fill();
+
+  /* right arm, higher — asymmetric reads more natural */
+  ctx.beginPath();
+  ctx.moveTo(10, -46);
+  ctx.bezierCurveTo(32, -48, 38, -64, 33, -76);
+  ctx.quadraticCurveTo(31, -83, 23, -81);
+  ctx.bezierCurveTo(26, -70, 22, -58, 6, -56);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawHeatShimmer(P, stormMix) {
+  const heat = currentHeat;
+  if (heat <= 0.05) return;
+  for (let i = 0; i < 3; i++) {
+    const y = horizonY - 3 + i * 2;
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 10) {
+      const wob = Math.sin(x * 0.045 + T * 3.2 + i * 1.7) * 2.2 * heat;
+      x === 0 ? ctx.moveTo(x, y + wob) : ctx.lineTo(x, y + wob);
+    }
+    ctx.strokeStyle = rgb(P.duneFar, 0.1 * heat);
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+function drawDesertScene(P, sway, stormMix) {
+  for (let i = 0; i < NUM_DUNES; i++) {
+    const depth = i / (NUM_DUNES - 1);
+    const profile = DUNE_PROFILE[i];
+    const yTop = horizonY + Math.pow(depth, 1.4) * (H - horizonY) * 0.82;
+    const amp = profile.amp * Math.min(H, W);
+    const col = lerpRGB(P.duneFar, P.duneNear, depth);
+    const pts = duneLayers[i];
+
+    if (depth < 0.6) {
+      const haze = ctx.createLinearGradient(0, yTop - 8, 0, yTop + 22);
+      haze.addColorStop(0, rgb(P.skyHor, 0));
+      haze.addColorStop(
+        0.5,
+        rgb(lerpRGB(P.skyHor, [255, 255, 255], 0.3), 0.14),
+      );
+      haze.addColorStop(1, rgb(P.skyHor, 0));
+      ctx.fillStyle = haze;
+      ctx.fillRect(0, yTop - 8, W, 30);
+    }
+
+    buildDunePath(pts, yTop, amp);
+    ctx.fillStyle = rgb(col);
+    ctx.fill();
+
+    /* crest highlight facing the sun — a soft rim of light along the
+       top edge of each dune, the one lighting cue real dunes always show */
+    ctx.save();
+    buildDunePath(pts, yTop, amp);
+    ctx.clip();
+    const rim = ctx.createLinearGradient(0, yTop - amp, 0, yTop - amp * 0.4);
+    rim.addColorStop(
+      0,
+      rgb(lerpRGB(col, P.sun, 0.4), 0.35 * (1 - depth * 0.5)),
+    );
+    rim.addColorStop(1, rgb(col, 0));
+    ctx.fillStyle = rim;
+    ctx.fillRect(0, yTop - amp - 4, W, amp * 0.65);
+    ctx.restore();
+  }
+
+  drawHeatShimmer(P, stormMix);
+
+  /* fine sand texture on the nearest dune */
+  const groundY = H - Math.min(H, W) * 0.1;
+  ctx.fillStyle = rgb(lerpRGB(P.duneNear, [255, 245, 225], 0.15), 0.18);
+  sandGrains.forEach((sgr) => {
+    if (sgr.y * H + groundY > H) return;
+    ctx.fillRect(sgr.x * W, groundY + sgr.y * (H - groundY), sgr.s, sgr.s);
+  });
+
+  const silCol = rgb(lerpRGB(P.duneNear, [0, 0, 0], 0.55));
+  const cactusScale = Math.min(2.6, H / 300, W / 340);
+  drawCactus(W * 0.1, H - 4, cactusScale, silCol);
+  drawCactus(W * 0.19, H - 2, cactusScale * 0.55, silCol);
+  drawRock(W * 0.85, H - 8, 44, 26, silCol);
+  drawRock(W * 0.9, H - 4, 26, 16, silCol);
 }
 
 /* ════════════════════════════════════════
@@ -1283,11 +1797,31 @@ function draw() {
   const P = getPalette(timeOfDay);
   updateAudioMix(P, nowMs);
 
+  /* eclipse progresses 0 → 1 → 0 over its whole run, then turns itself off */
+  if (eclipseActive) {
+    eclipseT += dt / 4.6;
+    if (eclipseT >= 1) {
+      eclipseT = 0;
+      eclipseActive = false;
+    }
+  }
+  const eclipseAmount = eclipseActive ? Math.sin(eclipseT * Math.PI) : 0;
+  const effStar = Math.max(P.star, eclipseAmount * 0.92);
+
   /* rain overcasts the sky — blend everything toward storm grey rather
-     than touching the palette itself, so it layers on any time/mood */
+     than touching the palette itself, so it layers on any time/mood.
+     A total eclipse darkens things even further, on top of that. */
   const stormMix = rainOn ? 0.6 : 0;
-  const skyTopC = lerpRGB(P.skyTop, [64, 68, 76], stormMix);
-  const skyHorC = lerpRGB(P.skyHor, [104, 108, 116], stormMix);
+  const skyTopC = lerpRGB(
+    lerpRGB(P.skyTop, [64, 68, 76], stormMix),
+    [8, 9, 16],
+    eclipseAmount * 0.88,
+  );
+  const skyHorC = lerpRGB(
+    lerpRGB(P.skyHor, [104, 108, 116], stormMix),
+    [30, 26, 40],
+    eclipseAmount * 0.85,
+  );
 
   /* sun position */
   const sunX = W * (0.5 + (mouseX - 0.5) * 0.25);
@@ -1302,19 +1836,31 @@ function draw() {
   ctx.fillRect(0, 0, W, horizonY + 2);
 
   /* ── STARS ── */
-  if (P.star > 0.01 && !rainOn) {
+  if ((effStar > 0.01 && !rainOn) || eclipseAmount > 0.05) {
     stars.forEach((s) => {
       const tw = 0.5 + 0.5 * Math.sin(T * 2 + s.tw);
-      ctx.fillStyle = rgb([255, 255, 255], P.star * tw * 0.9);
+      ctx.fillStyle = rgb([255, 255, 255], effStar * tw * 0.9);
       ctx.beginPath();
       ctx.arc(s.x * W, s.y * horizonY, s.r, 0, Math.PI * 2);
       ctx.fill();
     });
 
+    /* the desert sky is the clearest of the three — a second, fainter
+       field of stars fills in between the regular ones */
+    if (sceneMode === "desert") {
+      desertStars.forEach((s) => {
+        const tw = 0.5 + 0.5 * Math.sin(T * 2.3 + s.tw);
+        ctx.fillStyle = rgb([255, 255, 255], effStar * tw * 0.65);
+        ctx.beginPath();
+        ctx.arc(s.x * W, s.y * horizonY, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
     /* constellations only emerge once the sky is properly dark —
        faint connecting lines plus slightly brighter, steadier stars */
-    if (P.star > 0.35) {
-      const cAlpha = ((P.star - 0.35) / 0.65) * P.star;
+    if (effStar > 0.35) {
+      const cAlpha = ((effStar - 0.35) / 0.65) * effStar;
       CONSTELLATIONS.forEach((c) => {
         const pts = c.stars.map(([sx, sy]) => ({
           x: (c.originX + sx * c.scale) * W,
@@ -1339,11 +1885,11 @@ function draw() {
     }
 
     maybeSpawnShootingStar(P, dt);
-    updateAndDrawShootingStars(P, dt);
   }
+  updateAndDrawShootingStars(P, dt);
 
   /* ── SUN GLOW ── */
-  const sunFade = 1 - stormMix * 0.75;
+  const sunFade = (1 - stormMix * 0.75) * (1 - eclipseAmount * 0.85);
   const glowR = Math.min(W, H) * 0.5;
   const g = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, glowR);
   g.addColorStop(0, rgb(P.glow, 0.55 * sunFade));
@@ -1354,12 +1900,44 @@ function draw() {
 
   /* ── SUN / MOON DISC ── */
   const sunR = Math.min(W, H) * 0.045;
+  currentSunX = sunX;
+  currentSunY = sunY;
+  currentSunR = sunR;
   ctx.save();
   ctx.globalAlpha = sunFade;
   drawCelestialBody(P, sunX, sunY, sunR);
   ctx.restore();
 
-  /* ── CLOUDS — heavier and darker once it's raining ── */
+  /* ── ECLIPSE — a dark disc slides over the sun/moon, corona and all ── */
+  if (eclipseAmount > 0.01) {
+    ctx.save();
+    ctx.globalAlpha = eclipseAmount;
+    const corona = ctx.createRadialGradient(
+      sunX,
+      sunY,
+      sunR * 0.8,
+      sunX,
+      sunY,
+      sunR * 2.4,
+    );
+    corona.addColorStop(0, "rgba(255,244,220,0.85)");
+    corona.addColorStop(0.35, "rgba(255,230,180,0.35)");
+    corona.addColorStop(1, "rgba(255,230,180,0)");
+    ctx.fillStyle = corona;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, sunR * 2.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#05060a";
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, sunR * 1.02, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /* ── CLOUDS — heavier and darker once it's raining, much sparser
+     over the desert (those skies are famously clear) ── */
+  const cloudSceneMul = sceneMode === "desert" && !rainOn ? 0.3 : 1;
   clouds.forEach((c) => {
     c.x += c.speed;
     if (c.x > 1.3) c.x = -0.3;
@@ -1369,7 +1947,7 @@ function draw() {
     const cloudCol = rainOn
       ? lerpRGB(skyHorC, [30, 32, 38], 0.5)
       : lerpRGB(P.skyHor, [255, 255, 255], 0.25);
-    ctx.fillStyle = rgb(cloudCol, rainOn ? 0.4 : 0.16);
+    ctx.fillStyle = rgb(cloudCol, (rainOn ? 0.4 : 0.16) * cloudSceneMul);
     for (let j = 0; j < 4; j++) {
       ctx.beginPath();
       ctx.ellipse(
@@ -1406,7 +1984,12 @@ function draw() {
   });
 
   /* ── ATMOSPHERIC HAZE AT HORIZON ── */
-  const farRef = sceneMode === "ocean" ? P.wFar : P.ridgeFar;
+  const farRef =
+    sceneMode === "ocean"
+      ? P.wFar
+      : sceneMode === "mountain"
+        ? P.ridgeFar
+        : P.duneFar;
   const haze = ctx.createLinearGradient(0, horizonY - 40, 0, horizonY + 40);
   haze.addColorStop(0, rgb(skyHorC, 0));
   haze.addColorStop(0.5, rgb(skyHorC, 0.45));
@@ -1519,11 +2102,20 @@ function draw() {
     );
     drawRock(W * 0.87, H - sandH * 0.12, 46, 30, silCol);
     drawRock(W * 0.92, H - sandH * 0.06, 28, 18, silCol);
-  } else {
+  } else if (sceneMode === "mountain") {
     /* ── MOUNTAINS: layered ridges, mist, snow caps, pines ── */
     const sway = Math.sin(T * 0.4) * 0.5;
     drawMountainScene(P, sway);
     drawFireflies(P);
+    maybeTriggerAurora(P, dt);
+    updateAndDrawAurora(dt);
+  } else {
+    /* ── DESERT: rolling dunes, cacti, the clearest sky of the three ── */
+    const sway = Math.sin(T * 0.4) * 0.5;
+    currentHeat =
+      Math.max(0, P.sunH - 0.45) * 1.8 * (1 - stormMix) * (1 - P.star);
+    drawDesertScene(P, sway, stormMix);
+    updateAndDrawMirage(dt);
   }
 
   /* ── RAIN — falls in front of the whole scene, same in both modes ── */
@@ -1562,6 +2154,9 @@ function draw() {
   ctx.fillStyle = grainPattern;
   ctx.fillRect(-gx, -gy, W + 128, H + 128);
   ctx.restore();
+
+  /* ── SECRET MESSAGE (easter eggs) ── */
+  updateAndDrawSecretMessage();
 
   /* ── UI TEXT ── */
   moodName.textContent = P.name;
