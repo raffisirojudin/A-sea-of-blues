@@ -480,6 +480,14 @@ const SCENE_LABELS = {
 let sceneMode = "ocean";
 const sceneLabel = document.getElementById("scene-label");
 const modeButtons = document.querySelectorAll(".mode-btn");
+const seasonSwitch = document.getElementById("season-switch");
+
+/* seasonal tint only really reads on the mountain slopes, so the
+   season control stays out of the way anywhere else */
+function updateSeasonSwitchVisibility() {
+  seasonSwitch.classList.toggle("hidden", sceneMode !== "mountain");
+}
+updateSeasonSwitchVisibility();
 
 modeButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -491,6 +499,7 @@ modeButtons.forEach((btn) => {
       b.setAttribute("aria-pressed", String(active));
     });
     sceneLabel.textContent = SCENE_LABELS[sceneMode];
+    updateSeasonSwitchVisibility();
   });
 });
 
