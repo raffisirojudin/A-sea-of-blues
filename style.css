@@ -38,6 +38,7 @@ body {
   align-items: flex-start;
 }
 .top-left {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -59,6 +60,22 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 999px;
   backdrop-filter: blur(12px);
+}
+#season-switch {
+  opacity: 1;
+  max-height: 44px;
+  margin-top: 0;
+  overflow: hidden;
+  transition:
+    opacity 0.22s ease,
+    max-height 0.3s ease,
+    margin-top 0.3s ease;
+}
+#season-switch.hidden {
+  opacity: 0;
+  max-height: 0;
+  margin-top: -10px;
+  pointer-events: none;
 }
 .mode-btn,
 .season-btn {
