@@ -42,6 +42,8 @@ const KEYS = [
     ridgeNear: [42, 52, 68],
     duneFar: [196, 148, 132],
     duneNear: [118, 68, 56],
+    canopyFar: [138, 166, 148],
+    canopyNear: [44, 76, 56],
     sunH: 0.1,
     glit: 0.7,
     star: 0,
@@ -63,6 +65,8 @@ const KEYS = [
     ridgeNear: [38, 88, 76],
     duneFar: [222, 184, 142],
     duneNear: [168, 112, 74],
+    canopyFar: [128, 186, 150],
+    canopyNear: [28, 96, 54],
     sunH: 0.55,
     glit: 0.5,
     star: 0,
@@ -84,6 +88,8 @@ const KEYS = [
     ridgeNear: [34, 92, 70],
     duneFar: [230, 200, 156],
     duneNear: [190, 146, 96],
+    canopyFar: [122, 192, 146],
+    canopyNear: [24, 102, 52],
     sunH: 0.92,
     glit: 0.45,
     star: 0,
@@ -105,6 +111,8 @@ const KEYS = [
     ridgeNear: [66, 58, 52],
     duneFar: [212, 140, 90],
     duneNear: [150, 80, 50],
+    canopyFar: [166, 176, 108],
+    canopyNear: [62, 84, 36],
     sunH: 0.3,
     glit: 0.95,
     star: 0,
@@ -126,6 +134,8 @@ const KEYS = [
     ridgeNear: [48, 36, 54],
     duneFar: [162, 92, 96],
     duneNear: [92, 52, 62],
+    canopyFar: [108, 100, 118],
+    canopyNear: [40, 38, 50],
     sunH: 0.06,
     glit: 1.0,
     star: 0.15,
@@ -147,6 +157,8 @@ const KEYS = [
     ridgeNear: [13, 17, 30],
     duneFar: [70, 76, 102],
     duneNear: [34, 38, 58],
+    canopyFar: [40, 56, 70],
+    canopyNear: [13, 24, 24],
     sunH: 0.55,
     glit: 0.55,
     star: 1,
@@ -186,6 +198,8 @@ function getPalette(t) {
     ridgeNear: lerpRGB(a.ridgeNear, b.ridgeNear, k),
     duneFar: lerpRGB(a.duneFar, b.duneFar, k),
     duneNear: lerpRGB(a.duneNear, b.duneNear, k),
+    canopyFar: lerpRGB(a.canopyFar, b.canopyFar, k),
+    canopyNear: lerpRGB(a.canopyNear, b.canopyNear, k),
     sunH: lerp(a.sunH, b.sunH, k),
     glit: lerp(a.glit, b.glit, k),
     star: lerp(a.star, b.star, k),
@@ -379,6 +393,53 @@ const DUNE_PROFILE = [
 const NUM_DUNES = DUNE_PROFILE.length;
 const duneLayers = DUNE_PROFILE.map((p) => generateDuneLayer(p.sharp));
 
+/* canopy silhouettes — clustered and bumpy, like overlapping tree
+   crowns, rendered later through little upward bulges between points
+   rather than straight (mountain) or single-smooth (dune) edges.
+   Point density is deliberately high — too few points and each bulge
+   reads as a smooth grassy hill instead of a cluster of individual
+   tree crowns. Texture fields are baked in here (not re-randomized
+   per frame) so the mottled crown highlights don't flicker. */
+function generateCanopyLayer(sharpness) {
+  const numPts = 44 + Math.floor(Math.random() * 18);
+  const pts = [];
+  for (let i = 0; i <= numPts; i++) {
+    pts.push({
+      xf: i / numPts,
+      hf: 0.3 + Math.random() * (0.35 + sharpness * 0.35),
+      tone: Math.random(),
+      show: Math.random() > 0.55,
+      rMul: 0.7 + Math.random() * 0.6,
+    });
+  }
+  return pts;
+}
+/* far → near: misty distant canopy, building to one emergent layer —
+   rainforests really do have a handful of "emergent" trees poking
+   above the main canopy — then denser foliage close to the viewer */
+const CANOPY_PROFILE = [
+  { amp: 0.05, sharp: 0.15 },
+  { amp: 0.1, sharp: 0.3 },
+  { amp: 0.16, sharp: 0.45 },
+  { amp: 0.34, sharp: 0.7 }, // the emergent layer
+  { amp: 0.2, sharp: 0.5 },
+  { amp: 0.08, sharp: 0.25 },
+];
+const NUM_CANOPY = CANOPY_PROFILE.length;
+const canopyLayers = CANOPY_PROFILE.map((p) => generateCanopyLayer(p.sharp));
+
+/* forest fireflies — noticeably more plentiful than the mountain's,
+   per request ("kunang-kunang lebih rimbun") */
+const forestFireflies = Array.from({ length: 42 }, () => ({
+  x: Math.random(),
+  y: 0.74 + Math.random() * 0.22,
+  phase: Math.random() * Math.PI * 2,
+  speed: 0.3 + Math.random() * 0.5,
+  driftX: (Math.random() - 0.5) * 0.00035,
+  driftY: (Math.random() - 0.5) * 0.00022,
+  hue: Math.random() < 0.75 ? [214, 255, 148] : [160, 220, 255], // mostly yellow-green, a few pale blue
+}));
+
 /* an extra, fainter star field only switched on in the desert — the
    sky there should read as noticeably more star-dense than the other
    two scenes */
@@ -476,6 +537,7 @@ const SCENE_LABELS = {
   ocean: "◑ \u00A0T I D E S",
   mountain: "▲ \u00A0S U M M I T",
   desert: "☼ \u00A0M I R A G E",
+  forest: "❋ \u00A0C A N O P Y",
 };
 let sceneMode = "ocean";
 const sceneLabel = document.getElementById("scene-label");
@@ -781,6 +843,60 @@ let currentSunX = 0,
   currentSunY = 0,
   currentSunR = 0;
 let currentHeat = 0; // how strong the desert heat-shimmer is right now
+
+/* egg #6 — click the place's own name enough times and its identity
+   glitches for a moment into one of the other two places, then snaps
+   back like nothing happened */
+let glitchActive = false;
+let glitchAge = 0;
+let glitchLife = 0;
+let glitchTargetMode = null;
+let labelClickTimes = [];
+function triggerSceneGlitch() {
+  if (glitchActive) return;
+  const others = ["ocean", "mountain", "desert", "forest"].filter(
+    (m) => m !== sceneMode,
+  );
+  glitchTargetMode = others[Math.floor(Math.random() * others.length)];
+  glitchActive = true;
+  glitchAge = 0;
+  glitchLife = 0.85 + Math.random() * 0.5;
+  showSecretMessage("??? wrong turn ???");
+}
+function updateSceneGlitch(dt) {
+  if (!glitchActive) return;
+  glitchAge += dt;
+  if (glitchAge > glitchLife) glitchActive = false;
+}
+function drawGlitchOverlay() {
+  if (!glitchActive) return;
+  ctx.save();
+  /* a few digital-tear bands: copy strips of the frame we just drew
+     back onto itself, shifted sideways */
+  const bandCount = 3 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < bandCount; i++) {
+    const y = Math.random() * H;
+    const h = 2 + Math.random() * 12;
+    const off = (Math.random() - 0.5) * 46;
+    ctx.drawImage(canvas, 0, y, W, h, off, y, W, h);
+  }
+  /* faint flickering static on top */
+  ctx.globalAlpha = 0.05 + Math.random() * 0.09;
+  ctx.fillStyle = grainPattern;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+sceneLabel.style.pointerEvents = "auto";
+sceneLabel.style.cursor = "pointer";
+sceneLabel.addEventListener("click", () => {
+  const now = performance.now();
+  labelClickTimes.push(now);
+  labelClickTimes = labelClickTimes.filter((t) => now - t < 2500);
+  if (labelClickTimes.length >= 6) {
+    labelClickTimes = [];
+    triggerSceneGlitch();
+  }
+});
 
 /* egg #5 — desert-only. Click into the shimmer near the horizon on a
    hot, bright dune day and the heat briefly plays a trick on you: a
@@ -1281,15 +1397,11 @@ function updateAndDrawRain(P, dt) {
       d.y += speed * dt * 0.6;
       d.x += windLean * speed * dt * 0.12;
 
-      /* in ocean mode the visible sea spans a huge apparent depth —
-         each drop gets its own impact line based on its depth so
-         splashes scatter across the whole surface instead of
-         bunching in one strip at the shoreline. Mountain ground is
-         genuinely flat, so it keeps a single impact line. */
-      const impactFrac =
-        sceneMode === "ocean"
-          ? lerp(waterTopFrac, groundFrac, d.depth)
-          : groundFrac;
+      /* every scene has visible terrain spanning from near the horizon
+         down to the foreground — each drop gets its own impact line
+         based on its depth so the rain (and its splashes) scatter
+         across that whole range instead of bunching at one fixed line */
+      const impactFrac = lerp(waterTopFrac, groundFrac, d.depth);
 
       if (prevY < impactFrac && d.y >= impactFrac) {
         const sx = d.x * W;
@@ -1521,6 +1633,116 @@ function drawRock(x, baseY, w, h, col) {
 }
 
 /* ════════════════════════════════════════
+   OCEAN — swells, ripples, fish, glitter, beach
+═══════════════════════════════════════ */
+function drawOceanScene(P, sunX, dt, stormMix) {
+  /* ── OCEAN SWELLS (back → front, stop at the shoreline) ── */
+  const NUM = 26;
+  for (let i = 0; i < NUM; i++) {
+    const depth = i / (NUM - 1); // 0 horizon → 1 shoreline
+    const yTop = horizonY + Math.pow(depth, 1.9) * oceanH;
+    const amp = lerp(0.6, 30, depth);
+    const wlen = lerp(46, 340, depth);
+    const speed = lerp(0.25, 0.9, depth);
+    const phase = T * speed + i * 0.9;
+    const col = lerpRGB(P.wFar, P.wNear, depth);
+
+    /* band fill */
+    ctx.beginPath();
+    ctx.moveTo(0, sandTopY);
+    ctx.lineTo(0, yTop + Math.sin(phase) * amp);
+    for (let x = 0; x <= W; x += 6) {
+      const y =
+        yTop +
+        Math.sin(x / wlen + phase) * amp +
+        Math.sin(x / (wlen * 0.4) + phase * 1.6) * amp * 0.3;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, sandTopY);
+    ctx.closePath();
+    ctx.fillStyle = rgb(col);
+    ctx.fill();
+
+    /* crest highlight — brighter near the sun column */
+    ctx.lineWidth = lerp(0.6, 2.2, depth);
+    ctx.beginPath();
+    let started = false;
+    for (let x = 0; x <= W; x += 6) {
+      const y =
+        yTop +
+        Math.sin(x / wlen + phase) * amp +
+        Math.sin(x / (wlen * 0.4) + phase * 1.6) * amp * 0.3;
+      started ? ctx.lineTo(x, y) : (ctx.moveTo(x, y), (started = true));
+    }
+    ctx.strokeStyle = rgb(lerpRGB(col, P.sun, 0.55), lerp(0.05, 0.3, depth));
+    ctx.stroke();
+
+    /* foam on the front swells */
+    if (depth > 0.62) {
+      const foamA = (depth - 0.62) / 0.38;
+      for (let x = 0; x <= W; x += 9) {
+        const y =
+          yTop +
+          Math.sin(x / wlen + phase) * amp +
+          Math.sin(x / (wlen * 0.4) + phase * 1.6) * amp * 0.3;
+        const crest = Math.sin(x / wlen + phase);
+        if (crest > 0.55 && Math.random() > 0.45) {
+          ctx.fillStyle = rgb(P.foam, foamA * (0.18 + Math.random() * 0.35));
+          ctx.fillRect(
+            x + (Math.random() - 0.5) * 6,
+            y - Math.random() * 3,
+            1.5 + Math.random() * 3,
+            1.5 + Math.random() * 2,
+          );
+        }
+      }
+    }
+  }
+
+  /* ── RIPPLES from clicks/taps ── */
+  updateAndDrawRipples(P, dt);
+
+  /* ── FISH — rare little leaps out of the water ── */
+  maybeSpawnFish(dt);
+  updateAndDrawFish(P, dt);
+
+  /* ── SUN / MOON GLITTER PATH — narrower & smaller once it's moonlight,
+     and mostly washed out by rain-choppy water + a hidden sun ── */
+  const glitterNarrow = lerp(1, 0.42, P.moon);
+  const glitterCount = 220;
+  const glitterFade = 1 - stormMix * 0.85;
+  for (let i = 0; i < glitterCount; i++) {
+    const dy = Math.random();
+    const y = horizonY + Math.pow(dy, 1.5) * oceanH;
+    const spread = lerp(6, W * 0.3, dy) * glitterNarrow;
+    const x = sunX + (Math.random() - 0.5) * 2 * spread;
+    const distFade = 1 - Math.min(1, Math.abs(x - sunX) / (spread + 1));
+    const flick = 0.25 + Math.random() * 0.75;
+    const a =
+      distFade * distFade * flick * P.glit * (1 - dy * 0.25) * glitterFade;
+    if (a < 0.02) continue;
+    ctx.fillStyle = rgb(P.sun, a * 0.85);
+    const len = (1 + Math.random() * (2 + dy * 4)) * lerp(1, 0.55, P.moon);
+    ctx.fillRect(x, y, len, 1 + dy);
+  }
+
+  /* ── BEACH: sand, tide wash, silhouettes ── */
+  drawSand(P, sunX);
+  drawShoreline(P);
+  const silCol = rgb(lerpRGB(P.wNear, [0, 0, 0], 0.55));
+  const sway = Math.sin(T * 0.4) * 0.5;
+  drawPalmTree(
+    W * 0.07,
+    H - sandH * 0.1,
+    Math.min(3.5, H / 260, W / 260),
+    sway,
+    silCol,
+  );
+  drawRock(W * 0.87, H - sandH * 0.12, 46, 30, silCol);
+  drawRock(W * 0.92, H - sandH * 0.06, 28, 18, silCol);
+}
+
+/* ════════════════════════════════════════
    MOUNTAINS — layered ridges + valley + pines
 ═══════════════════════════════════════ */
 function drawPineTree(x, baseY, scale, sway, col) {
@@ -1583,6 +1805,31 @@ function buildDunePath(pts, yTop, amp) {
   }
   const last = toXY(pts[pts.length - 1]);
   ctx.lineTo(last[0], last[1]);
+  ctx.lineTo(W, H);
+  ctx.closePath();
+}
+
+/* clustered canopy silhouette — a small upward bulge is drawn between
+   every pair of points instead of a straight or single-smooth edge,
+   giving the classic "overlapping tree crown" scalloped look */
+function buildCanopyPath(pts, yTop, amp) {
+  const toXY = (p) => [p.xf * W, yTop - amp * p.hf];
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  let [prevX, prevY] = [0, toXY(pts[0])[1]];
+  ctx.lineTo(prevX, prevY);
+  pts.forEach((p) => {
+    const [x, y] = toXY(p);
+    const spacing = x - prevX;
+    const midX = (prevX + x) / 2;
+    /* bulge height tracks the gap between points, not the layer's
+       total amplitude — keeps every bump reading as a roundish crown
+       instead of a tall spike once points are packed this densely */
+    const bulgeY = Math.min(prevY, y) - spacing * 0.6;
+    ctx.quadraticCurveTo(midX, bulgeY, x, y);
+    prevX = x;
+    prevY = y;
+  });
   ctx.lineTo(W, H);
   ctx.closePath();
 }
@@ -1776,6 +2023,150 @@ function drawDesertScene(P, sway, stormMix) {
   drawCactus(W * 0.19, H - 2, cactusScale * 0.55, silCol);
   drawRock(W * 0.85, H - 8, 44, 26, silCol);
   drawRock(W * 0.9, H - 4, 26, 16, silCol);
+}
+
+/* ════════════════════════════════════════
+   FOREST — layered canopy, thick mist, dense fireflies
+═══════════════════════════════════════ */
+function drawTropicalTree(x, baseY, scale, sway, col) {
+  ctx.save();
+  ctx.translate(x, baseY);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = col;
+
+  /* trunk with small buttress-root flares at the base */
+  ctx.beginPath();
+  ctx.moveTo(-14, 4);
+  ctx.quadraticCurveTo(-16, -10, -8, -14);
+  ctx.lineTo(-8, -90);
+  ctx.lineTo(8, -90);
+  ctx.lineTo(8, -14);
+  ctx.quadraticCurveTo(16, -10, 14, 4);
+  ctx.closePath();
+  ctx.fill();
+
+  /* crown: cluster of overlapping lobes, same "bump" language as the
+     canopy layers behind it, just at foreground scale */
+  const off = sway * 10;
+  const crownBumps = [
+    [-38, -128, 34],
+    [0, -146, 43],
+    [40, -126, 32],
+    [-16, -106, 30],
+    [22, -102, 28],
+  ];
+  crownBumps.forEach(([dx, dy, r]) => {
+    ctx.beginPath();
+    ctx.arc(dx + off, dy, r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  /* a couple of hanging vines for tropical flavor */
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.moveTo(-20, -92);
+  ctx.quadraticCurveTo(-24 + off * 0.5, -50, -17, -4);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(25, -96);
+  ctx.quadraticCurveTo(29 + off * 0.5, -55, 21, -8);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawForestFireflies(P) {
+  if (sceneMode !== "forest") return;
+  const visibility = Math.max(0, Math.min(1, P.star * 1.4 - 0.08));
+  if (visibility <= 0.02) return;
+
+  forestFireflies.forEach((f) => {
+    f.x += f.driftX;
+    f.y += f.driftY;
+    if (f.x < 0) f.x = 1;
+    if (f.x > 1) f.x = 0;
+    if (f.y < 0.7) f.y = 0.7;
+    if (f.y > 0.98) f.y = 0.98;
+
+    const glow = 0.5 + 0.5 * Math.sin(T * f.speed * 3 + f.phase);
+    const x = f.x * W,
+      y = f.y * H;
+    const r = 2 + glow * 1.6;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r * 4);
+    g.addColorStop(0, rgb(f.hue, visibility * glow * 0.9));
+    g.addColorStop(1, rgb(f.hue, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 4, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawForestScene(P, sway) {
+  for (let i = 0; i < NUM_CANOPY; i++) {
+    const depth = i / (NUM_CANOPY - 1);
+    const profile = CANOPY_PROFILE[i];
+    const yTop = horizonY + Math.pow(depth, 1.4) * (H - horizonY) * 0.82;
+    const amp = profile.amp * Math.min(H, W);
+    const col = lerpRGB(P.canopyFar, P.canopyNear, depth);
+    const pts = canopyLayers[i];
+
+    /* mist sits thicker and across more layers here than in the
+       mountains — a misty rainforest is practically the whole point */
+    if (depth < 0.72) {
+      const mist = ctx.createLinearGradient(0, yTop - 10, 0, yTop + 32);
+      mist.addColorStop(0, rgb(P.skyHor, 0));
+      mist.addColorStop(
+        0.5,
+        rgb(lerpRGB(P.skyHor, [255, 255, 255], 0.35), 0.22),
+      );
+      mist.addColorStop(1, rgb(P.skyHor, 0));
+      ctx.fillStyle = mist;
+      ctx.fillRect(0, yTop - 10, W, 42);
+    }
+
+    buildCanopyPath(pts, yTop, amp);
+    ctx.fillStyle = rgb(col);
+    ctx.fill();
+
+    /* mottled crown texture — sun-catching highlights and shadow
+       gaps between individual trees, only on the closer layers where
+       it would actually be visible (distant canopy stays smooth/hazy) */
+    if (depth > 0.35) {
+      ctx.save();
+      buildCanopyPath(pts, yTop, amp);
+      ctx.clip();
+      const lightCol = lerpRGB(col, [255, 255, 255], 0.22);
+      const darkCol = lerpRGB(col, [0, 0, 0], 0.2);
+      pts.forEach((p) => {
+        if (!p.show) return;
+        const x = p.xf * W;
+        const y = yTop - amp * p.hf;
+        const r = lerp(7, 20, depth) * p.rMul;
+        ctx.beginPath();
+        ctx.arc(x, y - r * 0.25, r, 0, Math.PI * 2);
+        ctx.fillStyle = rgb(p.tone > 0.5 ? lightCol : darkCol, 0.16);
+        ctx.fill();
+      });
+      ctx.restore();
+    }
+  }
+
+  /* leaf-litter ground texture, tinted to the nearest canopy color */
+  const groundY = H - Math.min(H, W) * 0.1;
+  ctx.fillStyle = rgb(lerpRGB(P.canopyNear, [0, 0, 0], 0.2), 0.2);
+  sandGrains.forEach((sgr) => {
+    if (sgr.y * H + groundY > H) return;
+    ctx.fillRect(sgr.x * W, groundY + sgr.y * (H - groundY), sgr.s, sgr.s);
+  });
+
+  const silCol = rgb(lerpRGB(P.canopyNear, [0, 0, 0], 0.55));
+  const treeScale = Math.min(2.6, H / 260, W / 300);
+  drawTropicalTree(W * 0.1, H - 4, treeScale, sway, silCol);
+  drawTropicalTree(W * 0.2, H - 2, treeScale * 0.6, sway, silCol);
+  drawRock(W * 0.86, H - 8, 42, 26, silCol);
+  drawRock(W * 0.91, H - 4, 24, 15, silCol);
 }
 
 /* ════════════════════════════════════════
@@ -1998,7 +2389,9 @@ function draw() {
       ? P.wFar
       : sceneMode === "mountain"
         ? P.ridgeFar
-        : P.duneFar;
+        : sceneMode === "desert"
+          ? P.duneFar
+          : P.canopyFar;
   const haze = ctx.createLinearGradient(0, horizonY - 40, 0, horizonY + 40);
   haze.addColorStop(0, rgb(skyHorC, 0));
   haze.addColorStop(0.5, rgb(skyHorC, 0.45));
@@ -2006,126 +2399,42 @@ function draw() {
   ctx.fillStyle = haze;
   ctx.fillRect(0, horizonY - 40, W, 80);
 
-  if (sceneMode === "ocean") {
-    /* ── OCEAN SWELLS (back → front, stop at the shoreline) ── */
-    const NUM = 26;
-    for (let i = 0; i < NUM; i++) {
-      const depth = i / (NUM - 1); // 0 horizon → 1 shoreline
-      const yTop = horizonY + Math.pow(depth, 1.9) * oceanH;
-      const amp = lerp(0.6, 30, depth);
-      const wlen = lerp(46, 340, depth);
-      const speed = lerp(0.25, 0.9, depth);
-      const phase = T * speed + i * 0.9;
-      const col = lerpRGB(P.wFar, P.wNear, depth);
+  updateSceneGlitch(dt);
+  const effectiveMode = glitchActive ? glitchTargetMode : sceneMode;
 
-      /* band fill */
-      ctx.beginPath();
-      ctx.moveTo(0, sandTopY);
-      ctx.lineTo(0, yTop + Math.sin(phase) * amp);
-      for (let x = 0; x <= W; x += 6) {
-        const y =
-          yTop +
-          Math.sin(x / wlen + phase) * amp +
-          Math.sin(x / (wlen * 0.4) + phase * 1.6) * amp * 0.3;
-        ctx.lineTo(x, y);
-      }
-      ctx.lineTo(W, sandTopY);
-      ctx.closePath();
-      ctx.fillStyle = rgb(col);
-      ctx.fill();
-
-      /* crest highlight — brighter near the sun column */
-      ctx.lineWidth = lerp(0.6, 2.2, depth);
-      ctx.beginPath();
-      let started = false;
-      for (let x = 0; x <= W; x += 6) {
-        const y =
-          yTop +
-          Math.sin(x / wlen + phase) * amp +
-          Math.sin(x / (wlen * 0.4) + phase * 1.6) * amp * 0.3;
-        started ? ctx.lineTo(x, y) : (ctx.moveTo(x, y), (started = true));
-      }
-      ctx.strokeStyle = rgb(lerpRGB(col, P.sun, 0.55), lerp(0.05, 0.3, depth));
-      ctx.stroke();
-
-      /* foam on the front swells */
-      if (depth > 0.62) {
-        const foamA = (depth - 0.62) / 0.38;
-        for (let x = 0; x <= W; x += 9) {
-          const y =
-            yTop +
-            Math.sin(x / wlen + phase) * amp +
-            Math.sin(x / (wlen * 0.4) + phase * 1.6) * amp * 0.3;
-          const crest = Math.sin(x / wlen + phase);
-          if (crest > 0.55 && Math.random() > 0.45) {
-            ctx.fillStyle = rgb(P.foam, foamA * (0.18 + Math.random() * 0.35));
-            ctx.fillRect(
-              x + (Math.random() - 0.5) * 6,
-              y - Math.random() * 3,
-              1.5 + Math.random() * 3,
-              1.5 + Math.random() * 2,
-            );
-          }
-        }
-      }
-    }
-
-    /* ── RIPPLES from clicks/taps ── */
-    updateAndDrawRipples(P, dt);
-
-    /* ── FISH — rare little leaps out of the water ── */
-    maybeSpawnFish(dt);
-    updateAndDrawFish(P, dt);
-
-    /* ── SUN / MOON GLITTER PATH — narrower & smaller once it's moonlight,
-       and mostly washed out by rain-choppy water + a hidden sun ── */
-    const glitterNarrow = lerp(1, 0.42, P.moon);
-    const glitterCount = 220;
-    const glitterFade = 1 - stormMix * 0.85;
-    for (let i = 0; i < glitterCount; i++) {
-      const dy = Math.random();
-      const y = horizonY + Math.pow(dy, 1.5) * oceanH;
-      const spread = lerp(6, W * 0.3, dy) * glitterNarrow;
-      const x = sunX + (Math.random() - 0.5) * 2 * spread;
-      const distFade = 1 - Math.min(1, Math.abs(x - sunX) / (spread + 1));
-      const flick = 0.25 + Math.random() * 0.75;
-      const a =
-        distFade * distFade * flick * P.glit * (1 - dy * 0.25) * glitterFade;
-      if (a < 0.02) continue;
-      ctx.fillStyle = rgb(P.sun, a * 0.85);
-      const len = (1 + Math.random() * (2 + dy * 4)) * lerp(1, 0.55, P.moon);
-      ctx.fillRect(x, y, len, 1 + dy);
-    }
-
-    /* ── BEACH: sand, tide wash, silhouettes ── */
-    drawSand(P, sunX);
-    drawShoreline(P);
-    const silCol = rgb(lerpRGB(P.wNear, [0, 0, 0], 0.55));
-    const sway = Math.sin(T * 0.4) * 0.5;
-    drawPalmTree(
-      W * 0.07,
-      H - sandH * 0.1,
-      Math.min(3.5, H / 260, W / 260),
-      sway,
-      silCol,
-    );
-    drawRock(W * 0.87, H - sandH * 0.12, 46, 30, silCol);
-    drawRock(W * 0.92, H - sandH * 0.06, 28, 18, silCol);
-  } else if (sceneMode === "mountain") {
+  if (effectiveMode === "ocean") {
+    drawOceanScene(P, sunX, dt, stormMix);
+  } else if (effectiveMode === "mountain") {
     /* ── MOUNTAINS: layered ridges, mist, snow caps, pines ── */
     const sway = Math.sin(T * 0.4) * 0.5;
     drawMountainScene(P, sway);
-    drawFireflies(P);
-    maybeTriggerAurora(P, dt);
-    updateAndDrawAurora(dt);
-  } else {
+  } else if (effectiveMode === "desert") {
     /* ── DESERT: rolling dunes, cacti, the clearest sky of the three ── */
     const sway = Math.sin(T * 0.4) * 0.5;
-    currentHeat =
-      Math.max(0, P.sunH - 0.45) * 1.8 * (1 - stormMix) * (1 - P.star);
     drawDesertScene(P, sway, stormMix);
-    updateAndDrawMirage(dt);
+  } else {
+    /* ── FOREST: layered canopy, thick mist, dense fireflies ── */
+    const sway = Math.sin(T * 0.4) * 0.5;
+    drawForestScene(P, sway);
   }
+
+  /* secondary per-scene flourishes only run for the real, current
+     scene — skipped during a glitch flash to keep things simple */
+  if (!glitchActive) {
+    if (sceneMode === "mountain") {
+      drawFireflies(P);
+      maybeTriggerAurora(P, dt);
+      updateAndDrawAurora(dt);
+    } else if (sceneMode === "desert") {
+      currentHeat =
+        Math.max(0, P.sunH - 0.45) * 1.8 * (1 - stormMix) * (1 - P.star);
+      updateAndDrawMirage(dt);
+    } else if (sceneMode === "forest") {
+      drawForestFireflies(P);
+    }
+  }
+
+  drawGlitchOverlay();
 
   /* ── RAIN — falls in front of the whole scene, same in both modes ── */
   updateAndDrawRain(P, dt);
