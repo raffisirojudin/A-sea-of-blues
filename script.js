@@ -1,6 +1,47 @@
 const canvas = document.getElementById("ocean");
 const ctx = canvas.getContext("2d");
 
+/* respects the OS-level "reduce motion" setting — dials back the
+   most flash/strobe-prone effects (lightning, screen-tear glitch)
+   for anyone sensitive to that kind of thing */
+const reduceMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+let prefersReducedMotion = reduceMotionQuery.matches;
+reduceMotionQuery.addEventListener("change", (e) => {
+  prefersReducedMotion = e.matches;
+});
+
+/* self-calibrating quality tier — measures real frame cost for a
+   stretch of frames rather than guessing from device specs, then
+   permanently drops particle/detail counts if the hardware is
+   struggling to keep up. Skips an initial warm-up window first —
+   first-paint, font decode, and JIT warm-up make early frames look
+   slower than true steady-state, which would otherwise misjudge
+   perfectly capable hardware as "low" tier. */
+let qualityTier = "high";
+let qualityCalibrations = 0;
+let calibFrames = 0;
+let calibTotal = 0;
+let warmupFrames = 0;
+const WARMUP_FRAME_COUNT = 30;
+const CALIB_FRAME_COUNT = 50;
+function updateQualityCalibration(dt) {
+  if (qualityCalibrations >= 2) return;
+  if (warmupFrames < WARMUP_FRAME_COUNT) {
+    warmupFrames++;
+    return;
+  }
+  calibFrames++;
+  calibTotal += dt;
+  if (calibFrames >= CALIB_FRAME_COUNT) {
+    const avgMs = (calibTotal / calibFrames) * 1000;
+    if (avgMs > 22) qualityTier = "low";
+    qualityCalibrations++;
+    calibFrames = 0;
+    calibTotal = 0;
+  }
+}
+const isLite = () => qualityTier === "low";
+
 let W, H, DPR, horizonY, oceanH, sandH, sandTopY;
 
 function resize() {
@@ -572,11 +613,7 @@ const SEASON_TINTS = {
   spring: { ground: [88, 156, 92], snowLine: 0.64, sandTint: [235, 210, 185] },
   summer: { ground: [46, 108, 64], snowLine: 0.72, sandTint: [230, 196, 150] },
   autumn: { ground: [168, 98, 42], snowLine: 0.6, sandTint: [214, 170, 130] },
-  winter: {
-    ground: [206, 214, 222],
-    snowLine: 0.32,
-    sandTint: [200, 200, 205],
-  },
+  winter: { ground: [206, 214, 222], snowLine: 0.32, sandTint: [200, 200, 205] },
 };
 let season = "summer";
 const seasonButtons = document.querySelectorAll(".season-btn");
@@ -800,16 +837,17 @@ function spawnRipple(x, y) {
 
 let sunHoldTimer = null;
 canvas.addEventListener("pointerdown", (e) => {
-  if (sceneMode === "ocean" && e.clientY > horizonY && e.clientY < sandTopY) {
+  if (
+    sceneMode === "ocean" &&
+    e.clientY > horizonY &&
+    e.clientY < sandTopY
+  ) {
     spawnRipple(e.clientX, e.clientY);
   }
   checkSunClickEasterEgg(e.clientX, e.clientY);
   checkMirageEasterEgg(e.clientX, e.clientY);
 
-  const distToSun = Math.hypot(
-    e.clientX - currentSunX,
-    e.clientY - currentSunY,
-  );
+  const distToSun = Math.hypot(e.clientX - currentSunX, e.clientY - currentSunY);
   if (distToSun < currentSunR * 2.2 && !eclipseActive) {
     sunHoldTimer = setTimeout(triggerEclipse, 1600);
   }
@@ -869,7 +907,7 @@ function updateSceneGlitch(dt) {
   if (glitchAge > glitchLife) glitchActive = false;
 }
 function drawGlitchOverlay() {
-  if (!glitchActive) return;
+  if (!glitchActive || prefersReducedMotion) return;
   ctx.save();
   /* a few digital-tear bands: copy strips of the frame we just drew
      back onto itself, shifted sideways */
@@ -1061,8 +1099,7 @@ function updateAndDrawAurora(dt) {
     ctx.beginPath();
     for (let x = 0; x <= W; x += 16) {
       const xf = x / W;
-      const y =
-        (b.yBase + Math.sin(xf * 4 + T * b.speed + bi) * b.amp) * horizonY;
+      const y = (b.yBase + Math.sin(xf * 4 + T * b.speed + bi) * b.amp) * horizonY;
       x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
     for (let x = W; x >= 0; x -= 16) {
@@ -1141,7 +1178,15 @@ function updateAndDrawRipples(P, dt) {
 
     if (rp.r > 8) {
       ctx.beginPath();
-      ctx.ellipse(rp.x, rp.y, rp.r * 0.6, rp.r * 0.6 * 0.34, 0, 0, Math.PI * 2);
+      ctx.ellipse(
+        rp.x,
+        rp.y,
+        rp.r * 0.6,
+        rp.r * 0.6 * 0.34,
+        0,
+        0,
+        Math.PI * 2,
+      );
       ctx.strokeStyle = rgb(P.foam, fade * 0.3);
       ctx.lineWidth = 1;
       ctx.stroke();
@@ -1367,19 +1412,13 @@ const rainDrops = Array.from({ length: RAIN_COUNT }, () => ({
 
 let groundSplashes = [];
 function spawnGroundSplash(x, y, size) {
-  groundSplashes.push({
-    x,
-    y,
-    age: 0,
-    life: 0.22 + Math.random() * 0.08,
-    size,
-  });
+  groundSplashes.push({ x, y, age: 0, life: 0.22 + Math.random() * 0.08, size });
 }
 
 let lightningAlpha = 0;
 function maybeTriggerLightning(dt) {
   if (Math.random() < 0.012 * dt) {
-    lightningAlpha = 0.5 + Math.random() * 0.35;
+    lightningAlpha = prefersReducedMotion ? 0.12 : 0.5 + Math.random() * 0.35;
     playThunder();
   }
 }
@@ -1387,11 +1426,14 @@ function maybeTriggerLightning(dt) {
 function updateAndDrawRain(P, dt) {
   const windLean = 0.22;
   const groundFrac =
-    sceneMode === "ocean" ? sandTopY / H : (H - Math.min(H, W) * 0.1) / H;
+    sceneMode === "ocean"
+      ? sandTopY / H
+      : (H - Math.min(H, W) * 0.1) / H;
   const waterTopFrac = horizonY / H;
 
+  const liteRain = isLite();
   if (rainOn) {
-    rainDrops.forEach((d) => {
+    rainDrops.forEach((d, idx) => {
       const speed = lerp(0.5, 1.6, d.depth);
       const prevY = d.y;
       d.y += speed * dt * 0.6;
@@ -1422,6 +1464,7 @@ function updateAndDrawRain(P, dt) {
       const x = d.x * W,
         y = d.y * H;
       if (y > impactFrac * H + 4) return;
+      if (liteRain && idx % 2 === 1) return;
       const len = lerp(9, 24, d.depth);
       const alpha = lerp(0.12, 0.4, d.depth);
       const dx = windLean * len * 0.55;
@@ -1637,7 +1680,9 @@ function drawRock(x, baseY, w, h, col) {
 ═══════════════════════════════════════ */
 function drawOceanScene(P, sunX, dt, stormMix) {
   /* ── OCEAN SWELLS (back → front, stop at the shoreline) ── */
-  const NUM = 26;
+  const lite = isLite();
+  const NUM = lite ? 16 : 26;
+  const xStep = lite ? 11 : 6;
   for (let i = 0; i < NUM; i++) {
     const depth = i / (NUM - 1); // 0 horizon → 1 shoreline
     const yTop = horizonY + Math.pow(depth, 1.9) * oceanH;
@@ -1647,17 +1692,23 @@ function drawOceanScene(P, sunX, dt, stormMix) {
     const phase = T * speed + i * 0.9;
     const col = lerpRGB(P.wFar, P.wNear, depth);
 
-    /* band fill */
-    ctx.beginPath();
-    ctx.moveTo(0, sandTopY);
-    ctx.lineTo(0, yTop + Math.sin(phase) * amp);
-    for (let x = 0; x <= W; x += 6) {
+    /* compute each wave point once and reuse it for the fill, the
+       crest stroke, and the foam pass below — this used to redo the
+       same two sine calls per x-step three separate times per layer */
+    const pts = [];
+    for (let x = 0; x <= W; x += xStep) {
       const y =
         yTop +
         Math.sin(x / wlen + phase) * amp +
         Math.sin(x / (wlen * 0.4) + phase * 1.6) * amp * 0.3;
-      ctx.lineTo(x, y);
+      pts.push(y);
     }
+
+    /* band fill */
+    ctx.beginPath();
+    ctx.moveTo(0, sandTopY);
+    ctx.lineTo(0, pts[0]);
+    for (let j = 0; j < pts.length; j++) ctx.lineTo(j * xStep, pts[j]);
     ctx.lineTo(W, sandTopY);
     ctx.closePath();
     ctx.fillStyle = rgb(col);
@@ -1666,25 +1717,17 @@ function drawOceanScene(P, sunX, dt, stormMix) {
     /* crest highlight — brighter near the sun column */
     ctx.lineWidth = lerp(0.6, 2.2, depth);
     ctx.beginPath();
-    let started = false;
-    for (let x = 0; x <= W; x += 6) {
-      const y =
-        yTop +
-        Math.sin(x / wlen + phase) * amp +
-        Math.sin(x / (wlen * 0.4) + phase * 1.6) * amp * 0.3;
-      started ? ctx.lineTo(x, y) : (ctx.moveTo(x, y), (started = true));
-    }
+    ctx.moveTo(0, pts[0]);
+    for (let j = 1; j < pts.length; j++) ctx.lineTo(j * xStep, pts[j]);
     ctx.strokeStyle = rgb(lerpRGB(col, P.sun, 0.55), lerp(0.05, 0.3, depth));
     ctx.stroke();
 
     /* foam on the front swells */
-    if (depth > 0.62) {
+    if (depth > 0.62 && !lite) {
       const foamA = (depth - 0.62) / 0.38;
-      for (let x = 0; x <= W; x += 9) {
-        const y =
-          yTop +
-          Math.sin(x / wlen + phase) * amp +
-          Math.sin(x / (wlen * 0.4) + phase * 1.6) * amp * 0.3;
+      for (let j = 0; j < pts.length; j += 2) {
+        const x = j * xStep;
+        const y = pts[j];
         const crest = Math.sin(x / wlen + phase);
         if (crest > 0.55 && Math.random() > 0.45) {
           ctx.fillStyle = rgb(P.foam, foamA * (0.18 + Math.random() * 0.35));
@@ -1709,7 +1752,7 @@ function drawOceanScene(P, sunX, dt, stormMix) {
   /* ── SUN / MOON GLITTER PATH — narrower & smaller once it's moonlight,
      and mostly washed out by rain-choppy water + a hidden sun ── */
   const glitterNarrow = lerp(1, 0.42, P.moon);
-  const glitterCount = 220;
+  const glitterCount = lite ? 100 : 220;
   const glitterFade = 1 - stormMix * 0.85;
   for (let i = 0; i < glitterCount; i++) {
     const dy = Math.random();
@@ -1900,9 +1943,7 @@ function drawMountainScene(P, sway) {
   });
 
   /* pine cluster + boulders, standing in for the palm/rocks the beach uses */
-  const silCol = rgb(
-    lerpRGB(lerpRGB(P.ridgeNear, tint.ground, 0.3), [0, 0, 0], 0.5),
-  );
+  const silCol = rgb(lerpRGB(lerpRGB(P.ridgeNear, tint.ground, 0.3), [0, 0, 0], 0.5));
   const pineScale = Math.min(3.6, H / 220, W / 260);
   drawPineTree(W * 0.09, H - 6, pineScale, sway, silCol);
   drawPineTree(W * 0.2, H - 4, pineScale * 0.62, sway, silCol);
@@ -1993,18 +2034,20 @@ function drawDesertScene(P, sway, stormMix) {
 
     /* crest highlight facing the sun — a soft rim of light along the
        top edge of each dune, the one lighting cue real dunes always show */
-    ctx.save();
-    buildDunePath(pts, yTop, amp);
-    ctx.clip();
-    const rim = ctx.createLinearGradient(0, yTop - amp, 0, yTop - amp * 0.4);
-    rim.addColorStop(
-      0,
-      rgb(lerpRGB(col, P.sun, 0.4), 0.35 * (1 - depth * 0.5)),
-    );
-    rim.addColorStop(1, rgb(col, 0));
-    ctx.fillStyle = rim;
-    ctx.fillRect(0, yTop - amp - 4, W, amp * 0.65);
-    ctx.restore();
+    if (!isLite()) {
+      ctx.save();
+      buildDunePath(pts, yTop, amp);
+      ctx.clip();
+      const rim = ctx.createLinearGradient(0, yTop - amp, 0, yTop - amp * 0.4);
+      rim.addColorStop(
+        0,
+        rgb(lerpRGB(col, P.sun, 0.4), 0.35 * (1 - depth * 0.5)),
+      );
+      rim.addColorStop(1, rgb(col, 0));
+      ctx.fillStyle = rim;
+      ctx.fillRect(0, yTop - amp - 4, W, amp * 0.65);
+      ctx.restore();
+    }
   }
 
   drawHeatShimmer(P, stormMix);
@@ -2133,7 +2176,7 @@ function drawForestScene(P, sway) {
     /* mottled crown texture — sun-catching highlights and shadow
        gaps between individual trees, only on the closer layers where
        it would actually be visible (distant canopy stays smooth/hazy) */
-    if (depth > 0.35) {
+    if (depth > 0.35 && !isLite()) {
       ctx.save();
       buildCanopyPath(pts, yTop, amp);
       ctx.clip();
@@ -2173,12 +2216,14 @@ function drawForestScene(P, sway) {
    RENDER
 ═══════════════════════════════════════ */
 let T = 0;
+let frameCounter = 0;
 let lastFrameMs = performance.now();
 
 function draw() {
   const nowMs = performance.now();
   const dt = Math.min((nowMs - lastFrameMs) / 1000, 0.05); // seconds, clamped
   lastFrameMs = nowMs;
+  updateQualityCalibration(dt);
 
   T += 0.016;
 
@@ -2237,7 +2282,9 @@ function draw() {
 
   /* ── STARS ── */
   if ((effStar > 0.01 && !rainOn) || eclipseAmount > 0.05) {
-    stars.forEach((s) => {
+    const liteStars = isLite();
+    stars.forEach((s, idx) => {
+      if (liteStars && idx % 2 === 1) return;
       const tw = 0.5 + 0.5 * Math.sin(T * 2 + s.tw);
       ctx.fillStyle = rgb([255, 255, 255], effStar * tw * 0.9);
       ctx.beginPath();
@@ -2248,7 +2295,8 @@ function draw() {
     /* the desert sky is the clearest of the three — a second, fainter
        field of stars fills in between the regular ones */
     if (sceneMode === "desert") {
-      desertStars.forEach((s) => {
+      desertStars.forEach((s, idx) => {
+        if (liteStars && idx % 2 === 1) return;
         const tw = 0.5 + 0.5 * Math.sin(T * 2.3 + s.tw);
         ctx.fillStyle = rgb([255, 255, 255], effStar * tw * 0.65);
         ctx.beginPath();
@@ -2462,16 +2510,21 @@ function draw() {
   ctx.fillStyle = vig;
   ctx.fillRect(0, 0, W, H);
 
-  /* ── FILM GRAIN — subtle, shifts each frame so it doesn't look static ── */
-  ctx.save();
-  ctx.globalAlpha = 0.045;
-  ctx.globalCompositeOperation = "overlay";
-  const gx = (Math.random() - 0.5) * 128;
-  const gy = (Math.random() - 0.5) * 128;
-  ctx.translate(gx, gy);
-  ctx.fillStyle = grainPattern;
-  ctx.fillRect(-gx, -gy, W + 128, H + 128);
-  ctx.restore();
+  /* ── FILM GRAIN — subtle, shifts each frame so it doesn't look static.
+     Skipped every other frame on weak hardware — "overlay" blending
+     over the full canvas is one of the pricier things drawn here. */
+  frameCounter++;
+  if (!isLite() || frameCounter % 2 === 0) {
+    ctx.save();
+    ctx.globalAlpha = 0.045;
+    ctx.globalCompositeOperation = "overlay";
+    const gx = (Math.random() - 0.5) * 128;
+    const gy = (Math.random() - 0.5) * 128;
+    ctx.translate(gx, gy);
+    ctx.fillStyle = grainPattern;
+    ctx.fillRect(-gx, -gy, W + 128, H + 128);
+    ctx.restore();
+  }
 
   /* ── SECRET MESSAGE (easter eggs) ── */
   updateAndDrawSecretMessage();
