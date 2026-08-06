@@ -4,8 +4,6 @@
 
 An ambient, ever-changing scene rendered entirely in HTML5 Canvas and vanilla JavaScript. Drag one slider and watch an entire world drift from dawn to moonlight — across four living places, each with its own weather, wildlife, and secrets.
 
-![preview](preview.jpg)
-
 ---
 
 ## ✦ Places
